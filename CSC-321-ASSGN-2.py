@@ -1,6 +1,5 @@
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-import urllib.parse
 
 # PKCS#7 Padding
 def pkcs7_pad(data, block_size=16): #16 bytes block size for AES that is 128 bits
@@ -47,37 +46,45 @@ def submit(user_input, key, iv):
     suffix = ";session-id=31337"
     user_input = user_input.replace("=", "").replace(";", "")
     full_data = (prefix + user_input + suffix).replace("=", "%3D").replace(";", "%3B").encode('utf-8')
+    print("this is the full data",full_data)
     padded_data = pkcs7_pad(full_data)
+    print("this is the paded data",padded_data)
     ciphertext = encrypt_cbc(padded_data, key, iv)
+    print("this is the cipher data",ciphertext)
+    print()
+    print ("this is the ciphertext at index 0",ciphertext[0])
+    print()
     return ciphertext
 
 def verify(ciphertext, key, iv):
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    plaintext = cipher.decrypt(ciphertext)
+    plaintext = decrypt_cbc(ciphertext, key, iv)
     # unpad plaintext
     plaintext = pkcs7_unpad(plaintext)
     # convert url encoded plaintext to string
-    plaintext = plaintext.decode("utf-8",errors="ignore")
-    plaintext = plaintext.replace("%3D", "=")
-    plaintext = plaintext.replace("%3B", ";")
+    plaintext = plaintext.decode("utf-8",errors="ignore").replace("%3D", "=").replace("%3B", ";")
     # check if ;admin=true; is in plaintext
     return ';admin=true;' in plaintext
 
+def xor_byte(data, index, original_char, target_char):
+    """
+    Modify a byte at a specific index by XORing it to transform
+    `original_char` into `target_char`.
+    """
+    data[index] ^= ord(original_char) ^ ord(target_char)
 
 def bit_modification(modifdata):
     # Convert ciphertext to mutable bytearray
-    data = bytearray(modifdata)
-    # XOR specific bytes to inject the ";admin=true;" string into the decrypted plaintext
-    # You need to ensure these indexes correspond to where the characters of ";admin=true;"
-    # will appear in the decrypted plaintext. These indexes may need to be adjusted based on
-    # the actual structure of the ciphertext and its blocks.
-    
-    # XOR bytes at specific positions to inject ";admin=true;" (considering block sizes and padding)
-    data[16] = data[16] ^ ord("1") ^ ord(';')  # Modify byte to inject `;`
-    data[22] = data[22] ^ ord("1") ^ ord('=')  # Modify byte to inject `=`
-    data[27] = data[27] ^ ord("1") ^ ord(';')  # Modify byte to inject another `;`
-    # Return the modified ciphertext as bytes
-    return bytes(data)
+     """
+    Injects ";admin=true;" into the decrypted plaintext using XOR manipulation.
+    """
+     
+     data = bytearray(modifdata)
+     print(data)
+     print(data[16])
+     xor_byte(data, 16, '1', ';')  # Modify to inject `;`
+     xor_byte(data, 22, '1', '=')  # Modify to inject `=`
+     xor_byte(data, 27, '1', ';')  # Modify to inject `;`
+     return bytes(data)
 
 # Main Function
 def main(filename, key, iv=None, mode='ECB'):
@@ -101,6 +108,7 @@ def main(filename, key, iv=None, mode='ECB'):
     user_input = "1111111admin1true1"
 
     encrypted_data = submit(user_input, key, iv)
+
     is_admin = verify(encrypted_data, key, iv)
     print(f"Before modification - Is admin: {is_admin}")
     
